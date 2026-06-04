@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>403 Bypass Lab</title>
+
+  <style>
+    :root {
+      --bg:       #050a0e;
+      --surface:  #0a1520;
+      --border:   #0d2e4a;
+      --accent:   #00d4ff;
+      --accent2:  #ff6b35;
+      --green:    #00ff88;
+      --red:      #ff3366;
+      --yellow:   #ffd700;
+      --text:     #c9e8f5;
+      --muted:    #4a7a96;
+      --font-mono: 'Courier New', 'Lucida Console', monospace;
+      --font-head: 'Courier New', 'Lucida Console', monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-mono);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Scanline overlay */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,212,255,0.015) 2px,
+        rgba(0,212,255,0.015) 4px
+      );
+      pointer-events: none;
+      z-index: 9999;
+    }
+
+    /* Grid background */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 20px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* ── HEADER ──────────────────────────────────────────── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 24px 0 20px;
+      position: relative;
+    }
+
+    .header-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .logo {
+      font-family: var(--font-head);
+      font-size: 1.6rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      text-shadow: 0 0 20px rgba(0,212,255,0.5);
+    }
+
+    .logo span { color: var(--accent2); }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 20px;
+      font-size: 0.75rem;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 8px var(--green);
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .score-display {
+      font-family: var(--font-head);
+      font-size: 0.85rem;
+      color: var(--accent);
+    }
+
+    /* ── TABS ────────────────────────────────────────────── */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-top: 24px;
+    }
+
+    .tab {
+      padding: 10px 24px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.2s;
+      text-transform: uppercase;
+      background: none;
+      border-top: none;
+      border-left: none;
+      border-right: none;
+    }
+
+    .tab:hover { color: var(--accent); }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* ── VIEWS ───────────────────────────────────────────── */
+    .view { display: none; padding: 28px 0; }
+    .view.active { display: block; }
+
+    /* ── CHALLENGE GRID ──────────────────────────────────── */
+    .challenge-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .challenge-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 20px;
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+
+    .challenge-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0;
+      width: 3px; height: 100%;
+      background: var(--muted);
+      transition: background 0.2s;
+    }
+
+    .challenge-card:hover {
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(0,212,255,0.1);
+    }
+
+    .challenge-card:hover::before { background: var(--accent); }
+
+    .challenge-card.solved {
+      border-color: rgba(0,255,136,0.3);
+    }
+
+    .challenge-card.solved::before { background: var(--green); }
+
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .card-id {
+      font-family: var(--font-head);
+      font-size: 0.65rem;
+      color: var(--muted);
+      letter-spacing: 0.15em;
+    }
+
+    .badge {
+      font-size: 0.65rem;
+      padding: 3px 8px;
+      border: 1px solid;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .badge-easy   { color: var(--green);  border-color: var(--green);  }
+    .badge-medium { color: var(--yellow); border-color: var(--yellow); }
+    .badge-hard   { color: var(--red);    border-color: var(--red);    }
+
+    .card-title {
+      font-family: var(--font-head);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 6px;
+      letter-spacing: 0.04em;
+    }
+
+    .card-category {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+
+    .card-endpoint {
+      font-size: 0.72rem;
+      color: var(--accent2);
+      background: rgba(255,107,53,0.08);
+      padding: 4px 8px;
+      margin-bottom: 10px;
+      border-left: 2px solid var(--accent2);
+    }
+
+    .card-hint {
+      font-size: 0.72rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    .solved-banner {
+      display: none;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(0,255,136,0.2);
+      font-size: 0.72rem;
+      color: var(--green);
+    }
+
+    .challenge-card.solved .solved-banner { display: flex; }
+
+    /* ── FLAG SUBMIT ─────────────────────────────────────── */
+    .flag-section {
+      margin-top: 32px;
+      padding: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+
+    .flag-section h3 {
+      font-family: var(--font-head);
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .flag-form {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .flag-input {
+      flex: 1;
+      min-width: 240px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 0.85rem;
+      padding: 10px 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .flag-input:focus { border-color: var(--accent); }
+    .flag-input::placeholder { color: var(--muted); }
+
+    .btn {
+      padding: 10px 20px;
+      font-family: var(--font-mono);
+      font-size: 0.8rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      cursor: pointer;
+      border: 1px solid;
+      background: none;
+      transition: all 0.2s;
+    }
+
+    .btn-primary {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover {
+      background: rgba(0,212,255,0.1);
+      box-shadow: 0 0 15px rgba(0,212,255,0.2);
+    }
+
+    .flag-result {
+      margin-top: 10px;
+      font-size: 0.8rem;
+      padding: 8px 12px;
+      display: none;
+    }
+
+    .flag-result.success {
+      display: block;
+      background: rgba(0,255,136,0.08);
+      border-left: 3px solid var(--green);
+      color: var(--green);
+    }
+
+    .flag-result.error {
+      display: block;
+      background: rgba(255,51,102,0.08);
+      border-left: 3px solid var(--red);
+      color: var(--red);
+    }
+
+    /* ── PROGRESS BAR ────────────────────────────────────── */
+    .progress-section {
+      margin-bottom: 28px;
+      padding: 20px 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+
+    .progress-label {
+      font-family: var(--font-head);
+      font-size: 0.75rem;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .progress-bar-wrap {
+      flex: 1;
+      min-width: 120px;
+      height: 6px;
+      background: var(--border);
+      position: relative;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--green));
+      transition: width 0.6s ease;
+      box-shadow: 0 0 8px rgba(0,212,255,0.4);
+    }
+
+    .progress-count {
+      font-family: var(--font-head);
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+      white-space: nowrap;
+    }
+
+    /* ── WRITEUP VIEW ────────────────────────────────────── */
+    .writeup-container {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+
+    .writeup-list {
+      width: 220px;
+      flex-shrink: 0;
+    }
+
+    .writeup-list-item {
+      padding: 10px 14px;
+      font-size: 0.78rem;
+      color: var(--muted);
+      border-left: 2px solid var(--border);
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 4px;
+    }
+
+    .writeup-list-item:hover,
+    .writeup-list-item.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      background: rgba(0,212,255,0.05);
+    }
+
+    .writeup-content {
+      flex: 1;
+      min-width: 280px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 24px;
+    }
+
+    .writeup-content h2 {
+      font-family: var(--font-head);
+      font-size: 1rem;
+      letter-spacing: 0.06em;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+
+    .writeup-content .wc-meta {
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-bottom: 20px;
+    }
+
+    .writeup-content h4 {
+      font-size: 0.78rem;
+      color: var(--accent2);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin: 18px 0 8px;
+    }
+
+    .writeup-content p {
+      font-size: 0.8rem;
+      color: var(--text);
+      line-height: 1.7;
+      margin-bottom: 10px;
+    }
+
+    pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent2);
+      padding: 12px 16px;
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      color: var(--accent2);
+      overflow-x: auto;
+      margin: 10px 0;
+      white-space: pre;
+    }
+
+    .locked-writeup {
+      text-align: center;
+      padding: 40px;
+      color: var(--muted);
+    }
+
+    .locked-writeup .lock-icon {
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+      display: block;
+    }
+
+    /* ── ABOUT VIEW ──────────────────────────────────────── */
+    .about-content {
+      max-width: 700px;
+    }
+
+    .about-content h2 {
+      font-family: var(--font-head);
+      font-size: 1.1rem;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      margin-bottom: 16px;
+    }
+
+    .about-content p {
+      font-size: 0.82rem;
+      line-height: 1.8;
+      color: var(--text);
+      margin-bottom: 14px;
+    }
+
+    .tech-list {
+      margin: 16px 0;
+      padding-left: 0;
+      list-style: none;
+    }
+
+    .tech-list li {
+      font-size: 0.8rem;
+      color: var(--text);
+      padding: 6px 0;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+    }
+
+    .tech-list li::before {
+      content: '▸';
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .tech-list span { color: var(--muted); }
+
+    /* ── TERMINAL BOOT ───────────────────────────────────── */
+    #boot-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 10000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      font-size: 0.85rem;
+    }
+
+    #boot-text {
+      font-family: var(--font-mono);
+      color: var(--green);
+      width: min(480px, 90vw);
+    }
+
+    #boot-text .line {
+      opacity: 0;
+      margin-bottom: 4px;
+      white-space: pre;
+    }
+
+    @media (max-width: 600px) {
+      .logo { font-size: 1.1rem; }
+      .challenge-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Boot sequence overlay -->
+<div id="boot-overlay">
+  <div id="boot-text"></div>
+</div>
+
+<div class="container">
+  <header>
+    <div class="header-inner">
+      <div class="logo">403<span>.BYPASS</span> LAB <span style="font-size:0.5em; color:var(--muted)">by Akhil</span></div>
+      <div class="status-bar">
+        <span><span class="status-dot"></span>&nbsp;SYSTEM ONLINE &nbsp;|&nbsp; by Akhil</span>
+        <span class="score-display" id="score-display">0 / 8 SOLVED</span>
+      </div>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" data-view="challenges">Challenges</button>
+      <button class="tab" data-view="writeups">Writeups</button>
+      <button class="tab" data-view="about">About</button>
+    </div>
+  </header>
+
+  <!-- ── CHALLENGES VIEW ── -->
+  <div class="view active" id="view-challenges">
+
+    <div class="progress-section">
+      <span class="progress-label">PROGRESS</span>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+      <span class="progress-count" id="progress-count">0 / 8</span>
+    </div>
+
+    <div class="challenge-grid" id="challenge-grid"></div>
+
+    <div class="flag-section">
+      <h3>&#x25B8; SUBMIT FLAG</h3>
+      <div class="flag-form">
+        <input class="flag-input" id="flag-input" type="text" placeholder="FLAG{...}" spellcheck="false" autocomplete="off" />
+        <button class="btn btn-primary" id="flag-submit">Submit</button>
+      </div>
+      <div class="flag-result" id="flag-result"></div>
+    </div>
+  </div>
+
+  <!-- ── WRITEUPS VIEW ── -->
+  <div class="view" id="view-writeups">
+    <div class="writeup-container">
+      <div class="writeup-list" id="writeup-list"></div>
+      <div class="writeup-content" id="writeup-content">
+        <p style="color:var(--muted); font-size:0.8rem;">Select a challenge to view its writeup.<br>Writeups are locked until you solve a challenge.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── ABOUT VIEW ── -->
+  <div class="view" id="view-about">
+    <div class="about-content">
+      <h2>ABOUT THIS LAB</h2>
+      <p>
+        This lab contains 8 real-world 403 bypass techniques commonly found in web application penetration tests and bug bounty programs. Each challenge simulates a misconfigured access control implementation.
+      </p>
+      <p>
+        Techniques covered:
+      </p>
+      <ul class="tech-list">
+        <li>X-Forwarded-For / IP spoofing <span>— forge the client IP header</span></li>
+        <li>X-Rewrite-URL <span>— redirect routing via header injection</span></li>
+        <li>URL path encoding <span>— percent-encoding, dot segments</span></li>
+        <li>HTTP method override <span>— X-HTTP-Method-Override, _method</span></li>
+        <li>X-Original-URL <span>— framework routing bypass</span></li>
+        <li>Case sensitivity <span>— ACL regex case mismatch</span></li>
+        <li>Double/extra slashes <span>— WAF pattern evasion</span></li>
+        <li>Content-Type confusion <span>— firewall content-type filtering</span></li>
+      </ul>
+      <p>
+        Recommended tools: <code style="color:var(--accent2)">curl</code>, Burp Suite, ffuf. Writeups unlock after solving each challenge.
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────────────
+let challenges = [];
+const STORAGE_KEY = '403lab_solved';
+
+let _solvedCache = [];
+function getSolved() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; }
+  catch { return _solvedCache; }
+}
+
+function addSolved(id) {
+  try {
+    const s = getSolved();
+    if (!s.includes(id)) { s.push(id); localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); }
+  } catch { if (!_solvedCache.includes(id)) _solvedCache.push(id); }
+}
+
+// ── WRITEUP DATA ───────────────────────────────────────────────────────────
+const WRITEUPS = {
+  1: {
+    vuln: 'IP Allowlist via X-Forwarded-For',
+    description: 'The server trusts the X-Forwarded-For header to determine the client\'s IP without validation. By injecting a spoofed IP, you bypass the allowlist check.',
+    request: `GET /challenge/1/admin HTTP/1.1\nHost: localhost:3000\nX-Forwarded-For: 127.0.0.1`,
+    curl: `curl -H "X-Forwarded-For: 127.0.0.1" http://localhost:3000/challenge/1/admin`,
+    remediation: 'Never trust client-supplied headers for security decisions. Use the actual socket IP or a validated proxy header from a trusted upstream.',
+  },
+  2: {
+    vuln: 'X-Rewrite-URL Header Bypass',
+    description: 'Some frameworks (IIS, Nginx rewrite modules) honor the X-Rewrite-URL header to internally route requests. The WAF blocks the path directly, but the application processes the rewritten URL.',
+    request: `GET /challenge/2/public HTTP/1.1\nHost: localhost:3000\nX-Rewrite-URL: /challenge/2/secret`,
+    curl: `curl -H "X-Rewrite-URL: /challenge/2/secret" http://localhost:3000/challenge/2/public`,
+    remediation: 'Disable X-Rewrite-URL / X-Original-URL processing, or apply access controls after URL rewriting, not before.',
+  },
+  3: {
+    vuln: 'URL Path Encoding / Normalization Bypass',
+    description: 'The ACL checks the raw request path before URL decoding. By percent-encoding one character or using dot segments, the path passes the ACL check but the server normalizes it to the protected path.',
+    request: `GET /challenge/3/%70rivate HTTP/1.1\nHost: localhost:3000`,
+    curl: `curl "http://localhost:3000/challenge/3/%70rivate"`,
+    remediation: 'Normalize/decode URLs before applying access control checks. Use framework middleware that operates on the resolved path.',
+  },
+  4: {
+    vuln: 'HTTP Method Override (X-HTTP-Method-Override)',
+    description: 'Frameworks like Rails, Express, and Laravel support method overriding via the X-HTTP-Method-Override header or ?_method query param. The ACL blocks GET and POST, but the route handler responds to the overridden method.',
+    request: `POST /challenge/4/resource HTTP/1.1\nHost: localhost:3000\nX-HTTP-Method-Override: PATCH`,
+    curl: `curl -X POST -H "X-HTTP-Method-Override: PATCH" http://localhost:3000/challenge/4/resource`,
+    remediation: 'Disable method override support in production, or apply ACLs to effective methods, not just the HTTP verb.',
+  },
+  5: {
+    vuln: 'X-Original-URL Header (Framework Routing Bypass)',
+    description: 'Some frameworks route requests based on X-Original-URL before applying middleware ACLs. The "gateway" endpoint is public, but by setting X-Original-URL to the internal path, the routing engine processes it.',
+    request: `GET /challenge/5/gateway HTTP/1.1\nHost: localhost:3000\nX-Original-URL: /challenge/5/internal`,
+    curl: `curl -H "X-Original-URL: /challenge/5/internal" http://localhost:3000/challenge/5/gateway`,
+    remediation: 'Strip X-Original-URL at the reverse proxy layer. Apply authentication and authorization at the application layer, not solely at the proxy.',
+  },
+  6: {
+    vuln: 'ACL Case Sensitivity Mismatch',
+    description: 'The access control rule matches the exact string "/challenge/6/admin" (lowercase). The file system or router normalizes paths case-insensitively, allowing "Admin" or "ADMIN" to bypass the ACL.',
+    request: `GET /challenge/6/Admin HTTP/1.1\nHost: localhost:3000`,
+    curl: `curl "http://localhost:3000/challenge/6/Admin"`,
+    remediation: 'Apply ACL rules case-insensitively. Normalize request paths to lowercase before matching.',
+  },
+  7: {
+    vuln: 'Double Slash / Path Traversal WAF Evasion',
+    description: 'The WAF pattern matches exactly "/challenge/7/hidden". Adding an extra slash or dot segment confuses the regex but the underlying server normalizes the path to the same resource.',
+    request: `GET /challenge/7//hidden HTTP/1.1\nHost: localhost:3000`,
+    curl: `curl "http://localhost:3000/challenge/7//hidden"`,
+    remediation: 'Normalize paths (remove double slashes, resolve dot segments) before WAF evaluation. Use structural path matching, not regex on raw URLs.',
+  },
+  8: {
+    vuln: 'Content-Type Filtering Bypass',
+    description: 'The firewall blocks application/json and application/x-www-form-urlencoded but allows other Content-Types through. Sending an unusual Content-Type (e.g., application/xml or text/plain) bypasses the filter.',
+    request: `POST /challenge/8/action HTTP/1.1\nHost: localhost:3000\nContent-Type: application/xml\n\n<data>test</data>`,
+    curl: `curl -X POST -H "Content-Type: application/xml" -d "<data>test</data>" http://localhost:3000/challenge/8/action`,
+    remediation: 'Allowlist Content-Types, don\'t blocklist them. Validate and sanitize input regardless of Content-Type.',
+  },
+};
+
+// ── FORCE DISMISS BOOT AFTER 4s NO MATTER WHAT ────────────────────────────
+setTimeout(() => {
+  const overlay = document.getElementById('boot-overlay');
+  if (overlay) overlay.style.display = 'none';
+}, 4000);
+
+// ── BOOT SEQUENCE ──────────────────────────────────────────────────────────
+const bootLines = [
+  '> Initializing 403 Bypass Lab...',
+  '> Loading challenge modules............[OK]',
+  '> Mounting endpoints...................[OK]',
+  '> Firewall rules deployed..............[OK]',
+  '> ACL configurations loaded............[OK]',
+  '> 8 vulnerabilities armed..............[OK]',
+  '',
+  '> WARNING: Intentionally vulnerable system.',
+  '> AUTHORIZED TESTING ONLY.',
+  '',
+  '> Access granted. Good luck.',
+];
+
+async function runBoot() {
+  const el = document.getElementById('boot-text');
+  for (let i = 0; i < bootLines.length; i++) {
+    const line = document.createElement('div');
+    line.className = 'line';
+    line.textContent = bootLines[i] || ' ';
+    el.appendChild(line);
+    await new Promise(r => setTimeout(r, 80));
+    line.style.opacity = '1';
+  }
+  await new Promise(r => setTimeout(r, 500));
+  const overlay = document.getElementById('boot-overlay');
+  overlay.style.transition = 'opacity 0.5s';
+  overlay.style.opacity = '0';
+  await new Promise(r => setTimeout(r, 500));
+  overlay.style.display = 'none';
+}
+
+// ── RENDER ─────────────────────────────────────────────────────────────────
+function renderChallenges() {
+  const grid = document.getElementById('challenge-grid');
+  const solved = getSolved();
+  grid.innerHTML = '';
+
+  challenges.forEach(c => {
+    const isSolved = solved.includes(c.id);
+    const badgeClass = { Easy: 'badge-easy', Medium: 'badge-medium', Hard: 'badge-hard' }[c.difficulty];
+    const div = document.createElement('div');
+    div.className = 'challenge-card' + (isSolved ? ' solved' : '');
+    div.innerHTML = `
+      <div class="card-header">
+        <span class="card-id">CHALLENGE #${String(c.id).padStart(2,'0')}</span>
+        <span class="badge ${badgeClass}">${c.difficulty}</span>
+      </div>
+      <div class="card-title">${c.title}</div>
+      <div class="card-category">${c.category}</div>
+      <div class="card-endpoint">${c.endpoint}</div>
+      <div class="card-hint">${c.hint}</div>
+      <div class="solved-banner">&#x2713; SOLVED &mdash; flag captured</div>
+    `;
+    grid.appendChild(div);
+  });
+
+  updateProgress();
+}
+
+function updateProgress() {
+  const solved = getSolved();
+  const total = challenges.length || 8;
+  const pct = (solved.length / total) * 100;
+  document.getElementById('progress-fill').style.width = pct + '%';
+  document.getElementById('progress-count').textContent = `${solved.length} / ${total}`;
+  document.getElementById('score-display').textContent = `${solved.length} / ${total} SOLVED`;
+}
+
+function renderWriteupList() {
+  const el = document.getElementById('writeup-list');
+  const solved = getSolved();
+  el.innerHTML = '';
+  challenges.forEach(c => {
+    const isSolved = solved.includes(c.id);
+    const item = document.createElement('div');
+    item.className = 'writeup-list-item';
+    item.textContent = `#${String(c.id).padStart(2,'0')} ${c.title}`;
+    if (!isSolved) item.style.opacity = '0.4';
+    item.addEventListener('click', () => showWriteup(c, isSolved));
+    el.appendChild(item);
+  });
+}
+
+function showWriteup(c, unlocked) {
+  // mark active
+  document.querySelectorAll('.writeup-list-item').forEach((el, i) => {
+    el.classList.toggle('active', challenges[i]?.id === c.id);
+  });
+
+  const el = document.getElementById('writeup-content');
+  if (!unlocked) {
+    el.innerHTML = `
+      <div class="locked-writeup">
+        <span class="lock-icon">&#x1F512;</span>
+        <p style="color:var(--muted); font-size:0.8rem;">Solve challenge #${c.id} to unlock this writeup.</p>
+      </div>`;
+    return;
+  }
+
+  const w = WRITEUPS[c.id];
+  el.innerHTML = `
+    <h2>${c.title}</h2>
+    <div class="wc-meta">${c.category} &nbsp;|&nbsp; ${c.difficulty}</div>
+    <h4>Vulnerability</h4>
+    <p>${w.vuln}</p>
+    <h4>Description</h4>
+    <p>${w.description}</p>
+    <h4>HTTP Request</h4>
+    <pre>${w.request}</pre>
+    <h4>curl PoC</h4>
+    <pre>${w.curl}</pre>
+    <h4>Remediation</h4>
+    <p>${w.remediation}</p>
+  `;
+}
+
+// ── FLAG SUBMISSION ────────────────────────────────────────────────────────
+async function submitFlag() {
+  const input = document.getElementById('flag-input');
+  const result = document.getElementById('flag-result');
+  const flag = input.value.trim();
+  if (!flag) return;
+
+  result.className = 'flag-result';
+  result.style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/verify?flag=${encodeURIComponent(flag)}`);
+    const data = await res.json();
+
+    if (data.valid) {
+      const solved = getSolved();
+      if (solved.includes(data.challengeId)) {
+        result.textContent = `> Flag already captured for challenge #${data.challengeId}.`;
+        result.className = 'flag-result error';
+      } else {
+        addSolved(data.challengeId);
+        result.textContent = `> Challenge #${data.challengeId} solved! Flag accepted.`;
+        result.className = 'flag-result success';
+        renderChallenges();
+        renderWriteupList();
+      }
+      input.value = '';
+    } else {
+      result.textContent = '> Invalid flag. Keep trying.';
+      result.className = 'flag-result error';
+    }
+    result.style.display = 'block';
+  } catch {
+    result.textContent = '> Error submitting flag.';
+    result.className = 'flag-result error';
+    result.style.display = 'block';
+  }
+}
+
+// ── TABS ───────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('view-' + tab.dataset.view).classList.add('active');
+    if (tab.dataset.view === 'writeups') renderWriteupList();
+  });
+});
+
+document.getElementById('flag-submit').addEventListener('click', submitFlag);
+document.getElementById('flag-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitFlag();
+});
+
+// ── INIT ───────────────────────────────────────────────────────────────────
+async function init() {
+  try {
+    await runBoot();
+  } catch {
+    const overlay = document.getElementById('boot-overlay');
+    if (overlay) overlay.style.display = 'none';
+  }
+  try {
+    const res = await fetch('/api/challenges');
+    const data = await res.json();
+    challenges = data.challenges;
+  } catch {
+    challenges = Array.from({length:8}, (_,i) => ({id:i+1,title:`Challenge ${i+1}`,category:'Unknown',difficulty:'Medium',endpoint:'',hint:''}));
+  }
+  renderChallenges();
+  updateProgress();
+}
+
+init();
+</script>
+</body>
+</html>
