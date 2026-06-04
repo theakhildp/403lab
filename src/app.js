@@ -125,13 +125,20 @@ app.get('/challenge/5/internal', (req, res) => {
 });
 
 // ─── CHALLENGE 6: Case sensitivity bypass ────────────────────────────────────
-// The ACL rule is case-sensitive. /challenge/6/Admin vs /challenge/6/admin.
-app.get('/challenge/6/admin', (req, res) => {
-  respond403(res, 'Admin route is blocked. What if the ACL check is case-sensitive?');
-});
+app.use((req, res, next) => {
+  if (!req.url.startsWith('/challenge/6/')) return next();
 
-app.get(['/challenge/6/Admin', '/challenge/6/ADMIN', '/challenge/6/aDmIn'], (req, res) => {
-  respondFlag(res, 6);
+  const raw = req.url.split('?')[0];
+
+  if (raw === '/challenge/6/admin') {
+    return respond403(res, 'Admin route is blocked. What if the ACL check is case-sensitive?');
+  }
+
+  if (raw.toLowerCase() === '/challenge/6/admin') {
+    return respondFlag(res, 6);
+  }
+
+  next();
 });
 
 // ─── CHALLENGE 7: Double slash / extra slash bypass ──────────────────────────
