@@ -16,6 +16,8 @@ docker run -p 3000:3000 403lab
 
 Open **http://localhost:3000** in your browser.
 
+## Preview
+![403 Bypass Lab Preview](assets/preview.png)
 ---
 
 ## Challenges
